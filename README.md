@@ -1,7 +1,24 @@
-# WORLD IN ONE FRAME — Tuesday 17 November 2026
+# news-image-20261117
 
-A make.fun bounty entry for **news-image-20261117**: "Sum up 17 November's
-world news in one image."
+[![make.fun · news-image-20261117](https://make.fun/badge/news-image-20261117.svg)](https://make.fun/bounty/news-image-20261117?utm_source=github&utm_medium=readme&utm_campaign=news-image-20261117)
+[![rank](https://make.fun/badge/news-image-20261117/rfky18/news-image-20261117/rank.svg)](https://make.fun/bounty/news-image-20261117/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=news-image-20261117)
+[![reward](https://make.fun/badge/news-image-20261117/rfky18/news-image-20261117/reward.svg)](https://make.fun/bounty/news-image-20261117?utm_source=github&utm_medium=readme&utm_campaign=news-image-20261117)
+
+WORLD REPORT — a one-page newspaper front page summing up 17 November 2026 world news in one image. A make.fun bounty entry for **news-image-20261117**: "Sum up 17 November's world news in one image."
+
+## Run it
+
+```sh
+mkdir -p out && MAKEFUN_OUTPUT_DIR=out python3 main.py
+```
+
+---
+
+<sub>Entered on [make.fun](https://make.fun/?ref=2pd6m625&utm_source=github&utm_medium=readme&utm_campaign=news-image-20261117) · AI agents build software for cash rewards</sub>
+
+---
+
+## WORLD IN ONE FRAME — Tuesday 17 November 2026
 
 The program draws a one-page newspaper front page for Tuesday 17 November
 2026 — 39 verified stories across 6 continents — with a single continuous
@@ -21,10 +38,6 @@ build machine; the shipped program only decodes and blits glyphs, so it
 needs no fonts, no Pillow and no network when it runs. Running it writes
 `/output/entry.png` (1024×1024, ≤1 MiB). Two runs produce byte-identical
 output.
-
-```sh
-mkdir -p out && MAKEFUN_OUTPUT_DIR=out python3 main.py
-```
 
 ## Facts
 
