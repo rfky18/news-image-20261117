@@ -282,6 +282,7 @@ FONT = {
     '!': (4, [[(2, 1), (2, 10)], [(2, 13)]]),
     '?': (9, [[(2, 3), (3, 1), (6, 1), (8, 3), (8, 5), (6, 7), (4, 7), (4, 10)], [(4, 13)]]),
     "'": (4, [[(2, 1), (1, 4)]]),
+    '\u2018': (4, [[(2, 1), (1, 4)]]),
     '\u2019': (4, [[(2, 1), (1, 4)]]),
     '"': (7, [[(2, 1), (1, 4)], [(5, 1), (4, 4)]]),
     '\u201c': (7, [[(2, 1), (1, 4)], [(5, 1), (4, 4)]]),
@@ -597,15 +598,21 @@ def draw_map(cv, x, y, w, h, pins=None):
                 cy = oy + (r + 0.5) * cell
                 cv.disc(cx, cy, max(1.8, cell * 0.42), _region_color(c, r))
     if pins:
+        # small nudges so clustered pins stay legible (schematic map):
+        # Europe 1/2/5/8/13 and the US pair 6/7 would otherwise cover
+        # each other; each nudge is <=14 px (~2 map cells).
+        _nudge = {1: (12, -10), 2: (14, 6), 5: (2, 14), 6: (-12, 6),
+                  7: (10, -6), 8: (-14, 2), 13: (-10, -10)}
         for (lon, lat, n) in pins:
             col = (lon + 170.0) / 355.0 * 52.0
             row = (75.0 - lat) / 125.0 * 26.0
             px = ox + col * cell
             py = oy + row * cell
-            px = max(x + 10, min(x + w - 10, px))
-            py = max(y + 10, min(y + h - 10, py))
-            cv.disc(px, py, 9, INK)
-            cv.ring(px, py, 9, 1, (255, 255, 255))
+            dx, dy = _nudge.get(n, (0, 0))
+            px = max(x + 9, min(x + w - 9, px + dx))
+            py = max(y + 9, min(y + h - 9, py + dy))
+            cv.disc(px, py, 8, INK)
+            cv.ring(px, py, 8, 1, (255, 255, 255))
             draw_text(cv, px - text_width(str(n), 9) / 2.0, py - 6,
                       str(n), 9, (255, 255, 255), bold=True)
 
@@ -882,17 +889,33 @@ def _kerch_panel(cv, x, y, w, h):
     x1 = x + w
     y1 = y + h
     horizon = y + int(h * 0.55)
-    cv.fill_rect(x, y, x1, horizon, SKY)
+    _sky_bands(cv, x, y, w, horizon - y, (196, 216, 230), SKY)
     cv.fill_rect(x, horizon, x1, y1, SEA)
     cv.fill_rect(x, y1 - 10, x1, y1, SEA_DARK)
+    # cast shadow of the deck on the water (light is upper-left)
+    _soft_ellipse(cv, x + w * 0.5 + 6, horizon + 12, w * 0.42, 5, (20, 40, 60), 0.30)
     deck_y = horizon - 24
+    # deck with thickness: lit top edge, dark front face (isometric feel)
+    cv.fill_rect(x + 8, deck_y - 3, x + 118, deck_y, (205, 205, 198))
     cv.fill_rect(x + 8, deck_y, x + 118, deck_y + 7, INK)
+    cv.fill_rect(x + w - 108, deck_y - 3, x1 - 8, deck_y, (205, 205, 198))
     cv.fill_rect(x + w - 108, deck_y, x1 - 8, deck_y + 7, INK)
+    # collapsed span: tilted slab falling into the strait, lit top edge
     cv.poly([(x + 118, deck_y), (x + 158, horizon + 10),
              (x + 166, horizon + 10), (x + w - 108, deck_y)], (60, 60, 60))
+    cv.thick_line(x + 118, deck_y, x + w - 108, deck_y, 2, (205, 205, 198))
     for px in (x + 34, x + 88, x + w - 58):
         cv.fill_rect(px, deck_y + 7, px + 6, horizon + 12, INK)
+    # splash where the span meets the water
+    cv.disc(x + 158, horizon + 8, 7, (235, 242, 246))
+    cv.disc(x + 166, horizon + 10, 5, (255, 255, 255))
+    cv.disc(x + 148, horizon + 6, 4, (235, 242, 246))
+    # layered smoke (soft, lit from the upper left) + blast glow
+    _soft_disc(cv, x + 142, deck_y - 22, 16, (140, 138, 130), 0.55)
+    _soft_disc(cv, x + 150, deck_y - 30, 11, (170, 168, 160), 0.55)
+    _soft_disc(cv, x + 134, deck_y - 26, 9, (170, 168, 160), 0.5)
     _smoke(cv, x + 142, deck_y - 20, 1.1)
+    _soft_disc(cv, x + 140, deck_y + 2, 14, (230, 120, 20), 0.45)
     _burst(cv, x + 140, deck_y + 2, 1.0)
     _jet(cv, x + 30, y + 24, 1.0, INK)
     _jet(cv, x + w - 70, y + 18, 0.9, INK)
@@ -906,7 +929,7 @@ def _gulf_panel(cv, x, y, w, h):
     x1 = x + w
     y1 = y + h
     horizon = y + int(h * 0.55)
-    cv.fill_rect(x, y, x1, horizon, SKY)
+    _sky_bands(cv, x, y, w, horizon - y, (196, 216, 230), SKY)
     cv.fill_rect(x, horizon, x1, y1, SEA)
     cv.fill_rect(x, y1 - 10, x1, y1, SEA_DARK)
     cv.poly([(x + 22, y1 - 8), (x + 36, horizon + 16), (x + 70, horizon + 24),
@@ -915,15 +938,22 @@ def _gulf_panel(cv, x, y, w, h):
              (x + w - 6, y1 - 8)], SAND)
     cv.arc(x + 50, horizon + 18, 8, math.pi, 2 * math.pi, INK, 2)
     cv.vline(x + 50, horizon + 2, horizon + 18, INK, 2)
+    # radar dome (lit top-left) is marked downed: red disc + cross
     _drone(cv, x + 92, y + 32, 1.8, INK)
+    # drone's shadow on the sea, cast down-right
+    _soft_ellipse(cv, x + 100, horizon + 22, 12, 3, (20, 40, 60), 0.35)
     _jet(cv, x + w - 84, y + 26, 1.0, INK)
     for i in range(6):
         t = i / 5.0
         sx = int(x + 88 - t * 34)
         sy = int(y + 40 + t * (horizon - y - 32))
         cv.fill_rect(sx, sy, sx + 8, sy + 2, RED)
+    _soft_disc(cv, x + w - 58, horizon + 6, 13, (230, 120, 20), 0.45)
     _burst(cv, x + w - 58, horizon + 6, 0.9)
+    # ship: lit hull top, dark hull side, soft shadow on the water
+    _soft_ellipse(cv, x + 156, horizon + 34, 26, 4, (20, 40, 60), 0.30)
     _ship(cv, x + 150, horizon + 24, 1.3, (90, 60, 40))
+    cv.thick_line(x + 150 - 20, horizon + 24, x + 150 + 20, horizon + 24, 2, (150, 105, 70))
     cv.disc(x + 50, horizon + 10, 5, RED)
     cv.line(x + 44, horizon + 4, x + 56, horizon + 16, RED, 2)
     cv.line(x + 56, horizon + 4, x + 44, horizon + 16, RED, 2)
@@ -936,30 +966,52 @@ def _gulf_panel(cv, x, y, w, h):
 def _quad_panel(cv, x, y, w, h):
     x1 = x + w
     y1 = y + h
-    cv.fill_rect(x, y, x1, y1, (232, 226, 208))
-    fw, fh = 56, 32
+    # room with depth: lit upper wall, darker floor band; caption bar
+    # sits at y1-22, so the table must end above y+106 (h=128)
+    cv.fill_rect(x, y, x1, y + 76, (236, 230, 212))
+    cv.fill_rect(x, y + 76, x1, y1, (212, 204, 182))
+    fw, fh = 48, 28
+    step = (w - 20 - fw) / 3.0
     for i, k in enumerate(('us', 'in', 'jp', 'au')):
-        fx = x + 14 + i * 76
-        _flag(cv, fx, y + 34, fw, fh, k)
+        fx = x + 10 + i * step
+        # flagpole + soft shadow on the wall, light from upper left
+        cv.vline(fx - 3, y + 22, y + 56, (90, 90, 85), 2)
+        _flag(cv, fx, y + 26, fw, fh, k)
     for i, lab in enumerate(('US', 'INDIA', 'JAPAN', 'AUSTRALIA')):
-        lx = x + 14 + i * 76 + fw / 2.0
-        draw_text(cv, lx, y + 72, lab, 8.5, INK, bold=True, align='center')
-    cv.fill_rect(x + 20, y + 96, x1 - 20, y + 106, (120, 82, 40))
+        lx = x + 10 + i * step + fw / 2.0
+        draw_text(cv, lx, y + 58, lab, 8, INK, bold=True, align='center')
+    # four chairs behind the table (dark wood, lit backrest tops)
     for i in range(4):
-        lx = x + 34 + i * 76
-        cv.fill_rect(lx, y + 106, lx + 6, y + 128, (120, 82, 40))
-    cv.fill_rect(x + 20, y + 128, x1 - 20, y + 134, (120, 82, 40))
+        cx0 = x + 10 + i * step
+        cv.fill_rect(cx0, y + 70, cx0 + 24, y + 78, (96, 64, 34))
+        cv.fill_rect(cx0, y + 70, cx0 + 24, y + 73, (140, 96, 52))
+    # cast shadow of the table on the floor, down-right of the light
+    _soft_ellipse(cv, x + w / 2.0 + 5, y + 104, w * 0.42, 5, (60, 50, 30), 0.30)
+    # isometric table: lit top face, dark front face
+    cv.poly([(x + 16, y + 80), (x + 28, y + 75), (x1 - 16, y + 75),
+             (x1 - 28, y + 80)], (150, 105, 55))
+    cv.fill_rect(x + 16, y + 80, x1 - 16, y + 89, (110, 75, 38))
+    for i in range(4):
+        lx = x + 22 + i * step
+        cv.fill_rect(lx, y + 89, lx + 5, y + 101, (110, 75, 38))
+    cv.fill_rect(x + 16, y + 101, x1 - 16, y + 105, (110, 75, 38))
     _chip(cv, x + 6, y + 6, 'MANILA · QUAD LEADERS\u2019 SUMMIT', 9)
     cv.fill_rect(x, y1 - 22, x1, y1, INK)
     draw_text(cv, x + 8, y1 - 18, 'FIRST QUAD SUMMIT SINCE 2024', 9.5, (255, 255, 255), bold=True)
 
 
-def draw_lead_panels(cv, x, y, w, h):
-    pw = (w - 24) / 3.0
+def draw_hero(cv, x, y, w, h):
+    """Hero strip: Kerch panel | 3D globe | Gulf panel | Quad panel.
+    The globe is the visual anchor; the full 1-13 pin set stays on
+    the dot map below, so no story loses its map pin."""
+    gw = 176
+    pw = (w - gw - 3 * 8) / 3.0
     _kerch_panel(cv, x, y, pw, h)
-    _gulf_panel(cv, x + pw + 12, y, pw, h)
-    _quad_panel(cv, x + 2 * (pw + 12), y, pw, h)
+    _globe(cv, x + pw + 8, y, gw, h)
+    _gulf_panel(cv, x + pw + gw + 16, y, pw, h)
+    _quad_panel(cv, x + 2 * pw + gw + 24, y, pw, h)
     cv.line(x, y + h, x + w, y + h, INK, 2)
+
 
 
 def _chip(cv, x, y, s, cap):
@@ -973,6 +1025,138 @@ def _chip(cv, x, y, s, cap):
     draw_text(cv, x + cap * 0.6, y + cap * 0.45, s, cap, INK, bold=True)
 
 
+# ------------------------------------------------------- 3D helpers (v7)
+# One studio light from the upper left everywhere: highlights sit
+# top-left, cast shadows fall bottom-right. All shading is computed
+# from that single direction so the globe and the three lead scenes
+# read as lit by the same sun.
+LIGHT_DIR = (-0.55, 0.55, 0.62)  # direction TO the light, view space (y up)
+
+
+def _soft_disc(cv, cx, cy, r, c, a0):
+    """Disc with quadratic alpha falloff (soft shadow / glow / smoke)."""
+    r = int(r)
+    if r <= 0:
+        return
+    cx = int(cx)
+    cy = int(cy)
+    for y in range(cy - r, cy + r + 1):
+        for x in range(cx - r, cx + r + 1):
+            d2 = (x - cx) ** 2 + (y - cy) ** 2
+            if d2 <= r * r:
+                cv.blend(x, y, c, a0 * (1.0 - d2 / (r * r)))
+
+
+def _soft_ellipse(cv, cx, cy, rx, ry, c, a0):
+    """Soft elliptical cast shadow (alpha peaks at centre)."""
+    rx = int(rx)
+    ry = int(ry)
+    if rx <= 0 or ry <= 0:
+        return
+    for y in range(int(cy) - ry, int(cy) + ry + 1):
+        for x in range(int(cx) - rx, int(cx) + rx + 1):
+            q = ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2
+            if q <= 1.0:
+                cv.blend(x, y, c, a0 * (1.0 - q))
+
+
+def _sky_bands(cv, x, y, w, h, top, bottom):
+    """Vertical sky gradient in 5 flat bands (lightest at the top)."""
+    for i in range(5):
+        t = i / 4.0
+        c = tuple(int(top[k] + (bottom[k] - top[k]) * t) for k in range(3))
+        cv.fill_rect(x, y + i * h / 5.0, x + w, y + (i + 1) * h / 5.0, c)
+
+
+def _shade(base, f):
+    """Scale an RGB colour by a diffuse factor f (0..1.15)."""
+    return tuple(max(0, min(255, int(v * f))) for v in base)
+
+
+# Rough continent blobs (lon, lat, angular radius in degrees, colour)
+# used by the orthographic globe. Centred on lon 55E / lat 22N so the
+# Kerch Strait, the Gulf and Manila are all on the visible face.
+_GLOBE_LAND = [
+    (-100, 48, 22, (96, 130, 70)), (-85, 34, 13, (96, 130, 70)),
+    (-60, -12, 16, (96, 130, 70)),
+    (18, 4, 20, (96, 130, 70)), (30, -18, 12, (96, 130, 70)),
+    (55, 52, 30, (110, 138, 74)), (100, 55, 18, (110, 138, 74)),
+    (80, 30, 14, (110, 138, 74)), (103, 12, 10, (96, 130, 70)),
+    (134, -25, 11, (150, 128, 70)),
+    (24, 25, 11, (188, 168, 108)), (45, 25, 9, (188, 168, 108)),
+]
+_GLOBE_LAND_VEC = []
+for (_lo, _la, _rr, _cc) in _GLOBE_LAND:
+    _lr, _ar = math.radians(_lo), math.radians(_la)
+    _GLOBE_LAND_VEC.append((
+        (math.cos(_ar) * math.sin(_lr), math.sin(_ar), math.cos(_ar) * math.cos(_lr)),
+        math.cos(math.radians(_rr)), _cc))
+
+
+def _globe(cv, x, y, w, h):
+    """3D globe: orthographic sphere, one upper-left light, shaded
+    oceans + simple continents, specular highlight, cast shadow,
+    numbered pins for the three lead stories (1 Kerch, 2 Gulf,
+    3 Manila). The full 1-13 pin set stays on the dot map below."""
+    cx = x + w / 2.0
+    cy = y + h / 2.0 - 8
+    R = min(w, h - 22) / 2.0
+    lon0 = math.radians(55.0)
+    lat0 = math.radians(22.0)
+    cl0, sl0 = math.cos(lat0), math.sin(lat0)
+    co0, so0 = math.cos(lon0), math.sin(lon0)
+    lx, ly, lz = LIGHT_DIR
+    ln = math.sqrt(lx * lx + ly * ly + lz * lz)
+    lx, ly, lz = lx / ln, ly / ln, lz / ln
+    Ri = int(R)
+    for sy in range(int(cy) - Ri, int(cy) + Ri + 1):
+        for sx in range(int(cx) - Ri, int(cx) + Ri + 1):
+            dx = (sx + 0.5 - cx) / R
+            dy = (cy - (sy + 0.5)) / R  # screen down -> view up
+            q = dx * dx + dy * dy
+            if q > 1.0:
+                continue
+            z = math.sqrt(1.0 - q)
+            # view-space normal -> world point (rotate by lat0, then lon0)
+            px = dx
+            py = dy * cl0 - z * sl0
+            pz = dy * sl0 + z * cl0
+            wx = px * co0 + pz * so0
+            wy = py
+            wz = -px * so0 + pz * co0
+            diff = 0.32 + 0.68 * max(0.0, dx * lx + dy * ly + z * lz)
+            base = (64, 116, 168)
+            for (vx, vy, vz), cosr, col in _GLOBE_LAND_VEC:
+                if wx * vx + wy * vy + wz * vz > cosr:
+                    base = col
+                    break
+            cv.set(sx, sy, _shade(base, diff))
+    # specular highlight, upper left (same light direction)
+    _soft_disc(cv, cx - R * 0.38, cy - R * 0.42, R * 0.30, (255, 255, 255), 0.30)
+    _soft_disc(cv, cx - R * 0.42, cy - R * 0.46, R * 0.13, (255, 255, 255), 0.45)
+    cv.circle_outline(cx, cy, R, 2, (30, 60, 90))
+    # cast shadow, bottom right of the light
+    _soft_ellipse(cv, cx + 5, cy + R + 5, R * 0.85, 7, (20, 20, 20), 0.28)
+    # pins: 1 Kerch (36.5E, 45.3N), 2 Gulf/Bahrain (50.5E, 26.2N),
+    # 3 Manila (121E, 14.6N) — orthographic projection, same centre
+    for (lon, lat, n) in ((36.5, 45.3, 1), (50.5, 26.2, 2), (121.0, 14.6, 3)):
+        lo = math.radians(lon - 55.0)
+        la = math.radians(lat)
+        vx = math.cos(la) * math.sin(lo)
+        vy = math.cos(lat0) * math.sin(la) - math.sin(lat0) * math.cos(la) * math.cos(lo)
+        vz = math.sin(lat0) * math.sin(la) + math.cos(lat0) * math.cos(la) * math.cos(lo)
+        if vz <= 0.05:
+            continue
+        px = cx + vx * R
+        py = cy - vy * R
+        cv.disc(px, py, 6, RED)
+        cv.ring(px, py, 6, 1, (255, 255, 255))
+        draw_text(cv, px - text_width(str(n), 7) / 2.0, py - 4.5,
+                  str(n), 7, (255, 255, 255), bold=True)
+    draw_text(cv, cx, y + h - 13, '1 KERCH \u00b7 2 GULF \u00b7 3 MANILA', 8,
+              INK, bold=True, align='center')
+
+
 # ---------------------------------------------------------------- stories
 # 13 verified stories (PREP-NOTE §4). Decks: leads ~110-125 chars,
 # mediums ~60-75 chars. lat/lon for the map pins.
@@ -983,12 +1167,10 @@ STORIES = [
               'The Kremlin vows to rebuild.'),
     dict(n=2, kicker='2  MIDDLE EAST · IRAN–US', icon='iran', lon=50.5, lat=26.2,
          head='Iran sends drones at a US radar in Bahrain; US hits back',
-         deck='Bahrain and the US say all were downed; US jets then strike Qeshm. '
-              'Iran claims tankers hit mines in Hormuz.'),
+         deck='Bahrain and the US say the drones were downed; US jets then strike Qeshm.'),
     dict(n=3, kicker='3  ASIA · DIPLOMACY', icon='quad', lon=121.0, lat=14.6,
          head='Trump holds his first Quad summit, in Manila',
-         deck='The four meet in Manila; Trump hails critical-minerals deals; '
-              'Putin reaches Shenzhen for Thursday\u2019s talks with Trump and Xi.'),
+         deck='First Quad summit since 2024; leaders cite \u2018grave concerns\u2019 over coercion.'),
     dict(n=4, kicker='4  AFRICA · HEALTH', icon='ebola', lon=30.0, lat=1.5,
          head='Ebola cases in DR Congo top 11,000',
          deck='WHO: cases more than doubled in three months; 5,400+ died.'),
@@ -1018,7 +1200,7 @@ STORIES = [
          deck='Plane came down near Kemerovo; a fault is suspected.'),
     dict(n=13, kicker='13  EUROPE · BUSINESS', icon='bank', lon=8.7, lat=50.1,
          head='Deutsche Bank hit by 15m-file leak',
-         deck='A leak of 15m files details Epstein payments; shares fall.'),
+         deck='Reports say a leak of 15m files details Epstein payments; shares fall.'),
 ]
 
 # Numbered briefs (stories 14-39, verified in STORIES-EXTRA.md).
@@ -1079,77 +1261,107 @@ def _kicker_color(kicker):
 
 
 def _lead_card(cv, x, y, w, st):
-    kicker(cv, x, y, st['kicker'], 9, _kicker_color(st['kicker']))
-    hy = y + 22
-    lines = wrap_text(st['head'], 20, w)
-    draw_para(cv, x, hy, lines[:2], 20, INK, leading=24, bold=True)
-    dy = hy + 2 * 24 + 4
-    dlines = wrap_text(st['deck'], 12.5, w)
-    draw_para(cv, x, dy, dlines[:3], 12.5, INK_SOFT, leading=16)
+    """Secondary headline card: small 3D scene strip on top (the same
+    art as its hero panel), kicker, 2-line headline, 2-line deck."""
+    icon_strip(cv, x, y, w, 28, st['icon'])
+    kicker(cv, x, y + 32, st['kicker'], 9, _kicker_color(st['kicker']))
+    hy = y + 54
+    lines = wrap_text(st['head'], 19, w)
+    draw_para(cv, x, hy, lines[:2], 19, INK, leading=22, bold=True)
+    dy = hy + 2 * 22 + 4
+    dlines = wrap_text(st['deck'], 12, w)
+    draw_para(cv, x, dy, dlines[:2], 12, INK_SOFT, leading=15)
 
 
 def _medium_card(cv, x, y, w, h, st):
-    icon_strip(cv, x, y, w, 44, st['icon'])
-    kicker(cv, x, y + 48, st['kicker'], 8.5, _kicker_color(st['kicker']))
-    hy = y + 66
-    lines = wrap_text(st['head'], 17, w)
-    draw_para(cv, x, hy, lines[:3], 17, INK, leading=20, bold=True)
-    dy = y + 126
+    icon_strip(cv, x, y, w, 40, st['icon'])
+    kicker(cv, x, y + 44, st['kicker'], 8.5, _kicker_color(st['kicker']))
+    hy = y + 62
+    lines = wrap_text(st['head'], 16, w)
+    draw_para(cv, x, hy, lines[:3], 16, INK, leading=19, bold=True)
+    dy = y + 121
     dlines = wrap_text(st['deck'], 10, w)
     draw_para(cv, x, dy, dlines[:2], 10, INK_SOFT, leading=12.5)
 
 
+def _stat_box(cv, x, y, w, h):
+    """The day in numbers — fills the last medium-grid cell. Every
+    figure is verified in PREP-NOTE / STORIES-EXTRA."""
+    cv.fill_rect(x, y, x + w, y + h, INK)
+    draw_text(cv, x + 8, y + 8, 'THE DAY IN', 13, (255, 255, 255), bold=True)
+    draw_text(cv, x + 8, y + 24, 'NUMBERS', 13, (255, 210, 60), bold=True)
+    stats = [('11,000+', 'Ebola cases in DR Congo'),
+             ('5,400+', 'US measles cases in 2026'),
+             ('220 km/h', 'Cyclone Xavier winds'),
+             ('140 / 250', "Serbia's Student List seats")]
+    yy = y + 48
+    for num, lab in stats:
+        draw_text(cv, x + 8, yy, num, 11, (255, 210, 60), bold=True)
+        draw_text(cv, x + 8, yy + 12, lab, 8.5, (220, 220, 210))
+        yy += 25
+
+
 def build():
     cv = Canvas(W, H, PAPER)
-    # ---- top strip
-    draw_text(cv, MX, 10, 'THE WORLD\u2019S NEWS IN ONE PICTURE', 11, RED, bold=True)
+    # ---- top strip: the paper's identity line
+    draw_text(cv, MX, 10, 'WORLD IN ONE FRAME', 11, RED, bold=True)
     right = '39 STORIES \u00b7 6 CONTINENTS \u00b7 ALL FROM TUESDAY'
     draw_text(cv, MX + CW - text_width(right, 11), 10, right, 11, INK_SOFT, bold=True)
     cv.fill_rect(MX, 28, MX + CW, 30, RED)
-    # ---- masthead
-    title = 'Tuesday 17 November 2026'
-    draw_text(cv, MX + CW / 2.0, 34, title, 58, INK, bold=True, align='center')
-    draw_text(cv, MX + CW / 2.0, 100, 'WORLD IN ONE FRAME', 12, RED, bold=True, align='center')
-    cv.fill_rect(MX, 116, MX + CW, 118, INK)
-    # ---- lead panels (one per top story, labelled + captioned)
-    draw_lead_panels(cv, MX, 120, CW, 168)
-    cv.fill_rect(MX, 292, MX + CW, 294, INK)
-    # ---- 3 lead cards
-    leads = STORIES[0:3]
+    # ---- masthead: newspaper name in v6 serif, date line large below
+    draw_text(cv, MX + CW / 2.0, 32, 'WORLD REPORT', 46, INK, bold=True,
+              align='center', serif=True)
+    draw_text(cv, MX + CW / 2.0, 92, 'TUESDAY, 17 NOVEMBER 2026', 20, INK, bold=True,
+              align='center', serif=True)
+    cv.fill_rect(MX, 120, MX + CW, 122, INK)
+    # ---- main headline: the day's biggest verified development (story #1)
+    lead1 = STORIES[0]
+    draw_text(cv, MX + CW / 2.0, 126, lead1['head'], 25, INK, bold=True,
+              align='center', serif=True)
+    draw_text(cv, MX + CW / 2.0, 156, lead1['deck'], 11.5, INK_SOFT,
+              align='center')
+    # ---- hero strip: Kerch | 3D globe | the Gulf | Quad (h=128)
+    draw_hero(cv, MX, 178, CW, 128)
+    cv.fill_rect(MX, 310, MX + CW, 312, INK)
+    # ---- 3 secondary headline cards (stories #2, #3, #4)
+    leads = STORIES[1:4]
     colw = (CW - 24) / 3.0
     for i, st in enumerate(leads):
-        _lead_card(cv, MX + i * (colw + 12), 300, colw, st)
-    cv.fill_rect(MX, 424, MX + CW, 426, INK)
-    # ---- medium rows (stories 4..13)
-    mediums = STORIES[3:13]
+        _lead_card(cv, MX + i * (colw + 12), 316, colw, st)
+    cv.fill_rect(MX, 452, MX + CW, 454, INK)
+    # ---- medium rows (stories 5..13) + stat box in the last cell
+    mediums = STORIES[4:13]
     cardw = (CW - 4 * 9.5) / 5.0
     for r in range(2):
         for c in range(5):
             idx = r * 5 + c
-            if idx >= len(mediums):
-                break
-            _medium_card(cv, MX + c * (cardw + 9.5), 430 + r * 154, cardw, 154, mediums[idx])
-    cv.fill_rect(MX, 742, MX + CW, 744, INK)
+            xx = MX + c * (cardw + 9.5)
+            yy = 458 + r * 148
+            if idx < len(mediums):
+                _medium_card(cv, xx, yy, cardw, 148, mediums[idx])
+            elif idx == len(mediums):
+                _stat_box(cv, xx, yy, cardw, 148)
+    cv.fill_rect(MX, 756, MX + CW, 758, INK)
     # ---- bottom: map + numbered briefs
     pins = [(st['lon'], st['lat'], st['n']) for st in STORIES]
     if BRIEFS:
-        draw_text(cv, MX, 750, 'WHERE IT HAPPENED', 11, INK, bold=True)
-        draw_map(cv, MX, 768, 330, 186, pins=pins)
+        draw_text(cv, MX, 762, 'WHERE IT HAPPENED', 11, INK, bold=True)
+        draw_map(cv, MX, 780, 330, 174, pins=pins)
         lx = MX + 346
-        draw_text(cv, lx, 750, 'ALSO ON TUESDAY 17 NOVEMBER', 11, INK, bold=True)
-        cv.fill_rect(lx, 766, lx + 650, 768, RED)
+        draw_text(cv, lx, 762, 'ALSO ON TUESDAY 17 NOVEMBER', 11, INK, bold=True)
+        cv.fill_rect(lx, 778, lx + 650, 780, RED)
         colw2 = 322
         for i, (num, txt) in enumerate(BRIEFS):
             col = 0 if i < 13 else 1
             row = i if i < 13 else i - 13
             bx = lx + col * (colw2 + 6)
-            by = 774 + row * 14.5
+            by = 784 + row * 14.2
             draw_text(cv, bx, by, str(num), 10, RED, bold=True)
             draw_text(cv, bx + 18, by, txt, 10, INK)
         draw_text(cv, MX, 958, 'Pins: stories 1\u201313', 8.5, INK_SOFT)
     else:
-        draw_text(cv, MX, 750, 'WHERE IT HAPPENED', 11, INK, bold=True)
-        draw_map(cv, MX, 768, CW, 186, pins=pins)
+        draw_text(cv, MX, 762, 'WHERE IT HAPPENED', 11, INK, bold=True)
+        draw_map(cv, MX, 780, CW, 174, pins=pins)
         draw_text(cv, MX, 958, 'Pins: stories 1\u201313', 8.5, INK_SOFT)
     # ---- date check strip (text to the judge — allowed and read)
     cv.fill_rect(MX, 966, MX + CW, 1008, INK)
