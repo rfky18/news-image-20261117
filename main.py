@@ -566,6 +566,8 @@ def draw_map(cv, x, y, w, h, pins=None):
             row = (75.0 - lat) / 125.0 * 26.0
             px = ox + col * cell
             py = oy + row * cell
+            px = max(x + 10, min(x + w - 10, px))
+            py = max(y + 10, min(y + h - 10, py))
             cv.disc(px, py, 9, INK)
             cv.ring(px, py, 9, 1, (255, 255, 255))
             draw_text(cv, px - text_width(str(n), 9) / 2.0, py - 6,
@@ -803,12 +805,13 @@ def icon_strip(cv, x, y, w, h, kind):
         draw_text(cv, x + w * 0.28, y + h * 0.68, 'MAY MEET', 9, INK, bold=True)
     elif kind == 'bank':
         cv.fill_rect(x, y, x + w, y + h, (228, 232, 238))
-        _building(cv, cx - w * 0.26, y + h * 0.3, w * 0.52, h * 0.54, INK_SOFT)
+        for i in range(3):
+            py = y + h * (0.2 + i * 0.2)
+            cv.fill_rect(x + w * 0.24, py, x + w * 0.68, py + h * 0.14, (255, 255, 255))
+            cv.line(x + w * 0.24, py, x + w * 0.68, py, INK, 1)
+            cv.line(x + w * 0.24, py + h * 0.14, x + w * 0.68, py + h * 0.14, INK, 1)
         cv.fill_rect(x + w * 0.68, y + h * 0.1, x + w * 0.95, y + h * 0.32, RED)
         draw_text(cv, x + w * 0.7, y + h * 0.13, 'LEAK', 8, (255, 255, 255), bold=True)
-        cv.fill_rect(x + w * 0.06, y + h * 0.62, x + w * 0.3, y + h * 0.86, (255, 255, 255))
-        draw_text(cv, x + w * 0.08, y + h * 0.65, '15M', 8, RED, bold=True)
-        draw_text(cv, x + w * 0.08, y + h * 0.76, 'FILES', 7, INK, bold=True)
     elif kind == 'serbia':
         cv.fill_rect(x, y, x + w, y + h, (236, 232, 218))
         _building(cv, cx - w * 0.3, y + h * 0.3, w * 0.6, h * 0.52, INK_SOFT)
@@ -1002,7 +1005,7 @@ BRIEFS = [
     (27, 'Indonesia-India plan Sabang-Andaman link'),
     (28, 'EU lifts 2026 growth forecast to 1.4%'),
     (29, 'Vatican: Pope Leo XIV returns to Rome after 12 days'),
-    (30, 'NASA: Roman Telescope first images due 7 December'),
+    (30, 'NASA sets 7 Dec unveil for Roman Telescope images'),
     (31, 'Yemen: coalition says it hit 60 Houthi targets'),
     (32, 'London: Einaudi enters Ivors Fellowship; Pemberton wins'),
     (33, 'Australia eases working holiday visa rules'),
@@ -1101,8 +1104,8 @@ def build():
         cv.fill_rect(lx, 766, lx + 650, 768, RED)
         colw2 = 322
         for i, (num, txt) in enumerate(BRIEFS):
-            col = 0 if i < 14 else 1
-            row = i if i < 14 else i - 14
+            col = 0 if i < 13 else 1
+            row = i if i < 13 else i - 13
             bx = lx + col * (colw2 + 6)
             by = 774 + row * 14.5
             draw_text(cv, bx, by, str(num), 10, RED, bold=True)
