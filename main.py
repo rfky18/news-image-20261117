@@ -435,18 +435,36 @@ def draw_text(cv, x, y, s, cap, color, bold=False, align='left', maxw=None):
         x = x - w_px
     if maxw is not None:
         w_px = min(w_px, maxw)
-    SS = 3
-    sw = 1.7 * sc * SS * (1.35 if bold else 1.0)
-    bw = int(math.ceil(w_px * SS)) + 4
-    bh = int(math.ceil(20 * sc * SS)) + 4
+    SS = 4
+    sw = 1.9 * sc * SS * (1.5 if bold else 1.0)
+    bw = int(math.ceil(w_px * SS)) + 6
+    bh = int(math.ceil(20 * sc * SS)) + 6
     buf = bytearray(bw * bh)
-    cx = 2.0
+    cx = 3.0
     for ch in s:
         g = FONT.get(ch)
         if g is None:
             g = FONT['?']
-        _render_glyph_ss(buf, bw, cx, 2.0, sc * SS, sw, ch)
+        _render_glyph_ss(buf, bw, cx, 3.0, sc * SS, sw, ch)
         cx += g[0] * sc * SS
+    # one 3x3 box-blur pass on the supersampled buffer: smooths the
+    # polygonal stroke joints so small text reads clean, not hand-drawn
+    buf2 = bytearray(bw * bh)
+    for yy in range(bh):
+        for xx in range(bw):
+            acc = 0
+            cnt = 0
+            for dy in (-1, 0, 1):
+                y2 = yy + dy
+                if y2 < 0 or y2 >= bh:
+                    continue
+                for dx in (-1, 0, 1):
+                    x2 = xx + dx
+                    if 0 <= x2 < bw:
+                        acc += buf[y2 * bw + x2]
+                        cnt += 1
+            buf2[yy * bw + xx] = acc // cnt
+    buf = buf2
     # downsample + composite
     ox = int(math.floor(x))
     oy = int(math.floor(y))
@@ -541,17 +559,17 @@ def draw_map(cv, x, y, w, h, pins=None):
             for c in range(c0, c1 + 1):
                 cx = ox + (c + 0.5) * cell
                 cy = oy + (r + 0.5) * cell
-                cv.disc(cx, cy, max(1.5, cell * 0.36), _region_color(c, r))
+                cv.disc(cx, cy, max(1.8, cell * 0.42), _region_color(c, r))
     if pins:
         for (lon, lat, n) in pins:
             col = (lon + 170.0) / 355.0 * 52.0
             row = (75.0 - lat) / 125.0 * 26.0
             px = ox + col * cell
             py = oy + row * cell
-            cv.disc(px, py, 7.5, INK)
-            cv.ring(px, py, 7.5, 1, (255, 255, 255))
-            draw_text(cv, px - text_width(str(n), 8) / 2.0, py - 5.5,
-                      str(n), 8, (255, 255, 255), bold=True)
+            cv.disc(px, py, 9, INK)
+            cv.ring(px, py, 9, 1, (255, 255, 255))
+            draw_text(cv, px - text_width(str(n), 9) / 2.0, py - 6,
+                      str(n), 9, (255, 255, 255), bold=True)
 
 
 # ------------------------------------------------------- small flat icons
@@ -783,6 +801,14 @@ def icon_strip(cv, x, y, w, h, kind):
         _flag(cv, x + w * 0.62, y + h * 0.16, w * 0.24, h * 0.44, 'cn')
         draw_text(cv, x + w * 0.38, y + h * 0.26, '?', 16, INK, bold=True)
         draw_text(cv, x + w * 0.28, y + h * 0.68, 'MAY MEET', 9, INK, bold=True)
+    elif kind == 'bank':
+        cv.fill_rect(x, y, x + w, y + h, (228, 232, 238))
+        _building(cv, cx - w * 0.26, y + h * 0.3, w * 0.52, h * 0.54, INK_SOFT)
+        cv.fill_rect(x + w * 0.68, y + h * 0.1, x + w * 0.95, y + h * 0.32, RED)
+        draw_text(cv, x + w * 0.7, y + h * 0.13, 'LEAK', 8, (255, 255, 255), bold=True)
+        cv.fill_rect(x + w * 0.06, y + h * 0.62, x + w * 0.3, y + h * 0.86, (255, 255, 255))
+        draw_text(cv, x + w * 0.08, y + h * 0.65, '15M', 8, RED, bold=True)
+        draw_text(cv, x + w * 0.08, y + h * 0.76, 'FILES', 7, INK, bold=True)
     elif kind == 'serbia':
         cv.fill_rect(x, y, x + w, y + h, (236, 232, 218))
         _building(cv, cx - w * 0.3, y + h * 0.3, w * 0.6, h * 0.52, INK_SOFT)
@@ -810,80 +836,91 @@ def icon_strip(cv, x, y, w, h, kind):
         cv.disc(cx, cy, h * 0.22, BLUE)
         draw_text(cv, cx - 3, cy - 5, 'N', 10, (255, 255, 255), bold=True)
 
-# ------------------------------------------------------- lead panorama
-def draw_panorama(cv, x, y, w, h):
-    """One continuous scene: Kerch -> the Gulf -> Shenzhen (APEC)."""
+# ------------------------------------------------------- lead panels
+# Three separate illustrated lead panels (Kerch / the Gulf / Quad),
+# each labelled and captioned like a front page's lead art.
+def _kerch_panel(cv, x, y, w, h):
     x1 = x + w
     y1 = y + h
     horizon = y + int(h * 0.55)
-    # sky and sea
     cv.fill_rect(x, y, x1, horizon, SKY)
-    cv.fill_rect(x, horizon - 10, x1, horizon, SKY_DUSK)
     cv.fill_rect(x, horizon, x1, y1, SEA)
-    cv.fill_rect(x, y1 - 12, x1, y1, SEA_DARK)
-    for wx in range(x + 20, x1 - 10, 46):
-        cv.line(wx, y1 - 22, wx + 22, y1 - 22, SEA_DARK, 2)
-    # ---- left: Kerch Bridge, Crimea
-    bx0, bx1 = x + 8, x + int(w * 0.33)
-    deck_y = horizon - 26
-    cv.fill_rect(bx0, deck_y, bx0 + 118, deck_y + 7, INK)
-    cv.fill_rect(bx1 - 108, deck_y, bx1, deck_y + 7, INK)
-    cv.poly([(bx0 + 118, deck_y), (bx0 + 168, horizon + 8),
-             (bx0 + 176, horizon + 8), (bx1 - 108, deck_y)], (60, 60, 60))
-    for px in (bx0 + 34, bx0 + 88, bx1 - 60):
-        cv.fill_rect(px, deck_y + 7, px + 6, horizon + 14, INK)
-    _smoke(cv, bx0 + 150, deck_y - 22, 1.1)
-    _burst(cv, bx0 + 148, deck_y + 2, 1.0)
-    _jet(cv, bx0 + 30, y + 26, 1.0, INK)
-    _jet(cv, bx0 + 210, y + 18, 0.9, INK)
-    _chip(cv, bx0 + 6, y + 8, 'CRIMEA', 9)
-    _chip(cv, bx1 - 62, y + 8, 'RUSSIA', 9)
-    _chip(cv, bx0 + 6, horizon + 2, 'KERCH STRAIT', 9)
-    # ---- middle: the Gulf — Bahrain, Qeshm, Hormuz
-    gx0, gx1 = x + int(w * 0.33), x + int(w * 0.67)
-    cv.poly([(gx0 + 30, y1 - 8), (gx0 + 44, horizon + 18), (gx0 + 78, horizon + 26),
-             (gx0 + 92, y1 - 8)], SAND)
-    cv.poly([(gx1 - 118, y1 - 8), (gx1 - 108, horizon + 8), (gx1 - 30, horizon + 14),
-             (gx1 - 6, y1 - 8)], SAND)
-    cv.arc(gx0 + 58, horizon + 20, 8, math.pi, 2 * math.pi, INK, 2)
-    cv.vline(gx0 + 58, horizon + 4, horizon + 20, INK, 2)
-    _drone(cv, gx0 + 96, y + 34, 1.8, INK)
-    _jet(cv, gx1 - 92, y + 28, 1.0, INK)
+    cv.fill_rect(x, y1 - 10, x1, y1, SEA_DARK)
+    deck_y = horizon - 24
+    cv.fill_rect(x + 8, deck_y, x + 118, deck_y + 7, INK)
+    cv.fill_rect(x + w - 108, deck_y, x1 - 8, deck_y + 7, INK)
+    cv.poly([(x + 118, deck_y), (x + 158, horizon + 10),
+             (x + 166, horizon + 10), (x + w - 108, deck_y)], (60, 60, 60))
+    for px in (x + 34, x + 88, x + w - 58):
+        cv.fill_rect(px, deck_y + 7, px + 6, horizon + 12, INK)
+    _smoke(cv, x + 142, deck_y - 20, 1.1)
+    _burst(cv, x + 140, deck_y + 2, 1.0)
+    _jet(cv, x + 30, y + 24, 1.0, INK)
+    _jet(cv, x + w - 70, y + 18, 0.9, INK)
+    _chip(cv, x + 6, y + 6, 'CRIMEA', 9)
+    _chip(cv, x + w - 62, y + 6, 'RUSSIA', 9)
+    cv.fill_rect(x, y1 - 22, x1, y1, INK)
+    draw_text(cv, x + 8, y1 - 18, 'KERCH STRAIT — ROAD SPAN DOWN', 9.5, (255, 255, 255), bold=True)
+
+
+def _gulf_panel(cv, x, y, w, h):
+    x1 = x + w
+    y1 = y + h
+    horizon = y + int(h * 0.55)
+    cv.fill_rect(x, y, x1, horizon, SKY)
+    cv.fill_rect(x, horizon, x1, y1, SEA)
+    cv.fill_rect(x, y1 - 10, x1, y1, SEA_DARK)
+    cv.poly([(x + 22, y1 - 8), (x + 36, horizon + 16), (x + 70, horizon + 24),
+             (x + 84, y1 - 8)], SAND)
+    cv.poly([(x + w - 110, y1 - 8), (x + w - 100, horizon + 6), (x + w - 26, horizon + 12),
+             (x + w - 6, y1 - 8)], SAND)
+    cv.arc(x + 50, horizon + 18, 8, math.pi, 2 * math.pi, INK, 2)
+    cv.vline(x + 50, horizon + 2, horizon + 18, INK, 2)
+    _drone(cv, x + 92, y + 32, 1.8, INK)
+    _jet(cv, x + w - 84, y + 26, 1.0, INK)
     for i in range(6):
         t = i / 5.0
-        sx = int(gx0 + 92 - t * 30)
-        sy = int(y + 42 + t * (horizon - y - 34))
+        sx = int(x + 88 - t * 34)
+        sy = int(y + 40 + t * (horizon - y - 32))
         cv.fill_rect(sx, sy, sx + 8, sy + 2, RED)
-    _burst(cv, gx1 - 62, horizon + 8, 0.9)
-    _ship(cv, gx0 + 170, horizon + 26, 1.3, (90, 60, 40))
-    cv.disc(gx0 + 58, horizon + 12, 5, RED)
-    cv.line(gx0 + 52, horizon + 6, gx0 + 64, horizon + 18, RED, 2)
-    cv.line(gx0 + 64, horizon + 6, gx0 + 52, horizon + 18, RED, 2)
-    _chip(cv, gx0 + 8, y + 8, 'BAHRAIN', 9)
-    _chip(cv, gx1 - 64, y + 8, 'QESHM', 9)
-    _chip(cv, gx0 + 96, horizon + 2, 'THE GULF', 9)
-    # ---- right: Shenzhen skyline, APEC
-    sx0, sx1 = x + int(w * 0.67), x1
-    base = horizon + 6
-    heights = [62, 88, 54, 96, 70, 110, 66, 84, 58, 92]
-    bw = (sx1 - sx0 - 16) / len(heights)
-    for i, hh in enumerate(heights):
-        bx = sx0 + 8 + i * bw
-        cv.fill_rect(bx, base - hh, bx + bw - 3, base, (52, 64, 84))
-        for wy in range(int(base - hh + 8), int(base - 6), 12):
-            for wx in range(int(bx + 4), int(bx + bw - 7), 9):
-                if (int(wx) + int(wy)) % 3 == 0:
-                    cv.fill_rect(wx, wy, wx + 3, wy + 4, (255, 214, 120))
-    spx = sx0 + int((sx1 - sx0) * 0.52)
-    cv.fill_rect(spx - 2, base - 132, spx + 2, base, (52, 64, 84))
-    cv.disc(spx, base - 134, 4, (255, 200, 60))
-    for i, k in enumerate(('us', 'cn', 'ru')):
-        fx = sx0 + 18 + i * 34
-        cv.vline(fx, base - 26, base + 2, INK, 2)
-        _flag(cv, fx + 2, base - 26, 24, 14, k)
-    _chip(cv, sx0 + 8, y + 8, 'SHENZHEN · APEC', 9)
-    _chip(cv, sx0 + 8, horizon + 2, 'TRILATERAL DUE THU 19 NOV', 9)
-    cv.line(x, y1, x1, y1, INK, 2)
+    _burst(cv, x + w - 58, horizon + 6, 0.9)
+    _ship(cv, x + 150, horizon + 24, 1.3, (90, 60, 40))
+    cv.disc(x + 50, horizon + 10, 5, RED)
+    cv.line(x + 44, horizon + 4, x + 56, horizon + 16, RED, 2)
+    cv.line(x + 56, horizon + 4, x + 44, horizon + 16, RED, 2)
+    _chip(cv, x + 6, y + 6, 'BAHRAIN', 9)
+    _chip(cv, x + w - 58, y + 6, 'QESHM', 9)
+    cv.fill_rect(x, y1 - 22, x1, y1, INK)
+    draw_text(cv, x + 8, y1 - 18, 'THE GULF — DRONES DOWNED · US STRIKES', 9.5, (255, 255, 255), bold=True)
+
+
+def _quad_panel(cv, x, y, w, h):
+    x1 = x + w
+    y1 = y + h
+    cv.fill_rect(x, y, x1, y1, (232, 226, 208))
+    fw, fh = 56, 32
+    for i, k in enumerate(('us', 'in', 'jp', 'au')):
+        fx = x + 14 + i * 76
+        _flag(cv, fx, y + 34, fw, fh, k)
+    for i, lab in enumerate(('US', 'INDIA', 'JAPAN', 'AUSTRALIA')):
+        lx = x + 14 + i * 76 + fw / 2.0
+        draw_text(cv, lx, y + 72, lab, 8.5, INK, bold=True, align='center')
+    cv.fill_rect(x + 20, y + 96, x1 - 20, y + 106, (120, 82, 40))
+    for i in range(4):
+        lx = x + 34 + i * 76
+        cv.fill_rect(lx, y + 106, lx + 6, y + 128, (120, 82, 40))
+    cv.fill_rect(x + 20, y + 128, x1 - 20, y + 134, (120, 82, 40))
+    _chip(cv, x + 6, y + 6, 'MANILA · QUAD LEADERS\u2019 SUMMIT', 9)
+    cv.fill_rect(x, y1 - 22, x1, y1, INK)
+    draw_text(cv, x + 8, y1 - 18, 'FIRST QUAD SUMMIT SINCE 2024', 9.5, (255, 255, 255), bold=True)
+
+
+def draw_lead_panels(cv, x, y, w, h):
+    pw = (w - 24) / 3.0
+    _kerch_panel(cv, x, y, pw, h)
+    _gulf_panel(cv, x + pw + 12, y, pw, h)
+    _quad_panel(cv, x + 2 * (pw + 12), y, pw, h)
+    cv.line(x, y + h, x + w, y + h, INK, 2)
 
 
 def _chip(cv, x, y, s, cap):
@@ -908,11 +945,11 @@ STORIES = [
     dict(n=2, kicker='2  MIDDLE EAST · IRAN–US', icon='iran', lon=50.5, lat=26.2,
          head='Iran sends drones at a US radar in Bahrain; US hits back',
          deck='Bahrain and the US say all were downed; US jets then strike Qeshm. '
-              'Iran says tankers hit mines in Hormuz.'),
+              'Iran claims tankers hit mines in Hormuz.'),
     dict(n=3, kicker='3  ASIA · DIPLOMACY', icon='quad', lon=121.0, lat=14.6,
          head='Trump holds his first Quad summit, in Manila',
-         deck='The four unveil critical-minerals deals; Putin reaches Shenzhen for '
-              'Thursday\u2019s talks with Trump and Xi.'),
+         deck='The four meet in Manila; Trump hails critical-minerals deals; '
+              'Putin reaches Shenzhen for Thursday\u2019s talks with Trump and Xi.'),
     dict(n=4, kicker='4  AFRICA · HEALTH', icon='ebola', lon=30.0, lat=1.5,
          head='Ebola cases in DR Congo top 11,000',
          deck='WHO: cases more than doubled in three months; 5,400+ died.'),
@@ -925,55 +962,56 @@ STORIES = [
     dict(n=7, kicker='7  US · BUSINESS', icon='nvidia', lon=-74.0, lat=40.7,
          head='Nvidia\u2019s quarterly sales double to $115.8bn',
          deck='Reported after the close. Earlier the Dow fell 849 points.'),
-    dict(n=8, kicker='8  ASIA · POLITICS', icon='mongolia', lon=106.9, lat=47.9,
+    dict(n=8, kicker='8  EUROPE · POLITICS', icon='serbia', lon=20.5, lat=44.8,
+         head='Serbia\u2019s student MPs take their seats',
+         deck='Student List wins 140 of 250 seats, ending 14 years of SNS rule.'),
+    dict(n=9, kicker='9  ASIA · POLITICS', icon='mongolia', lon=106.9, lat=47.9,
          head='Mongolia\u2019s president says he will resign',
          deck='Khurelsukh denies $25m claim; parliament must accept.'),
-    dict(n=9, kicker='9  ASIA · DEFENCE', icon='japan', lon=130.4, lat=33.6,
+    dict(n=10, kicker='10  ASIA · DEFENCE', icon='japan', lon=130.4, lat=33.6,
          head='Japan scrambles jets over breach',
          deck='Two suspected Russian aircraft near Fukuoka, Tokyo says.'),
-    dict(n=10, kicker='10  OCEANIA · DISASTER', icon='xavier', lon=-165.8, lat=-10.9,
+    dict(n=11, kicker='11  OCEANIA · DISASTER', icon='xavier', lon=-165.8, lat=-10.9,
          head='Cyclone Xavier strengthens to Category 5',
          deck='Winds of 220 km/h near N. Cook Islands; shelters open.'),
-    dict(n=11, kicker='11  RUSSIA · AIR CRASH', icon='an12', lon=86.1, lat=55.4,
+    dict(n=12, kicker='12  RUSSIA · AIR CRASH', icon='an12', lon=86.1, lat=55.4,
          head='Russia says An-12 crash kills 19 in Siberia',
          deck='Plane came down near Kemerovo; a fault is suspected.'),
-    dict(n=12, kicker='12  CHINA · DIPLOMACY', icon='trilateral', lon=114.1, lat=22.5,
-         head='Trump, Xi and Putin due to meet Thursday',
-         deck='First trilateral, in Shenzhen on APEC sidelines, is planned.'),
-    dict(n=13, kicker='13  ASIA · DIPLOMACY', icon='trumpkim', lon=125.8, lat=39.0,
-         head='Trump says he may meet Kim Jong Un',
-         deck='\u201cUp to President Xi,\u201d Trump says of a possible meeting.'),
+    dict(n=13, kicker='13  EUROPE · BUSINESS', icon='bank', lon=8.7, lat=50.1,
+         head='Deutsche Bank hit by 15m-file leak',
+         deck='A leak of 15m files details Epstein payments; shares fall.'),
 ]
 
 # Numbered briefs (stories 14-39, verified in STORIES-EXTRA.md).
 # One line each, <=56 chars, facts compressed from the verified decks.
+# Trilateral (#38) and Trump-Kim (#39) are PLANNED, labelled as such.
 BRIEFS = [
-    (14, 'Serbia: student MPs take 140 of 250 seats in Belgrade'),
-    (15, 'Bangladesh: garment workers clash with police over pay'),
-    (16, 'Mozambique: Mondlane on trial over 2024 unrest'),
-    (17, 'Moldova: seven drones violate airspace; flights divert'),
-    (18, 'Germany: Deutsche Bank leak: 15m files; shares fall'),
-    (19, 'Sudan: UN: drones behind most of 2,230 civilian deaths'),
-    (20, 'US: Anthropic files $70-$78 IPO range for Nasdaq'),
-    (21, 'Gaza: Board of Peace warns truce could collapse'),
-    (22, "NBA: Pistons end Spurs' 12-game win streak, 105-93"),
-    (23, 'Tennis: Zverev beats Shelton to reach ATP Finals semis'),
-    (24, 'Cricket: Zimbabwe win first away Test series since 2001'),
-    (25, 'US: Democrats to probe $100bn Venezuela oil deal'),
-    (26, 'Brazil: images said to show uncontacted Awa released'),
-    (27, 'Brazil: Lula moves to contain fiscal plan revolt'),
-    (28, 'Nigeria: expects to sign AfCFTA digital trade deal'),
-    (29, 'Indonesia-India plan Sabang-Andaman link'),
-    (30, 'EU lifts 2026 growth forecast to 1.4%'),
-    (31, 'Vatican: Pope Leo XIV returns to Rome after 12 days'),
-    (32, 'NASA: Roman Telescope first images due 7 December'),
-    (33, 'Yemen: coalition says it hit 60 Houthi targets'),
-    (34, 'London: Einaudi enters Ivors Fellowship; Pemberton wins'),
-    (35, 'Australia eases working holiday visa rules'),
-    (36, 'China-Canada agree tariff relief in Shenzhen'),
-    (37, 'South Africa rebukes Nigerian envoy'),
-    (38, 'Kenya: Dangote set for Pipeline board seat'),
-    (39, 'Modi pitches maritime plan at ASEAN summit'),
+    (14, 'Bangladesh: garment workers clash with police over pay'),
+    (15, 'Mozambique: Mondlane on trial over 2024 unrest'),
+    (16, 'Moldova: seven drones violate airspace; flights divert'),
+    (17, 'Sudan: UN: drones behind most of 2,230 civilian deaths'),
+    (18, 'US: Anthropic files $70-$78 IPO range for Nasdaq'),
+    (19, 'Gaza: Board of Peace warns truce could collapse'),
+    (20, "NBA: Pistons end Spurs' 12-game win streak, 105-93"),
+    (21, 'Tennis: Zverev beats Shelton to reach ATP Finals semis'),
+    (22, 'Cricket: Zimbabwe win first away Test series since 2001'),
+    (23, 'US: Democrats to probe $100bn Venezuela oil deal'),
+    (24, 'Brazil: images said to show uncontacted Awa released'),
+    (25, 'Brazil: Lula moves to contain fiscal plan revolt'),
+    (26, 'Nigeria: expects to sign AfCFTA digital trade deal'),
+    (27, 'Indonesia-India plan Sabang-Andaman link'),
+    (28, 'EU lifts 2026 growth forecast to 1.4%'),
+    (29, 'Vatican: Pope Leo XIV returns to Rome after 12 days'),
+    (30, 'NASA: Roman Telescope first images due 7 December'),
+    (31, 'Yemen: coalition says it hit 60 Houthi targets'),
+    (32, 'London: Einaudi enters Ivors Fellowship; Pemberton wins'),
+    (33, 'Australia eases working holiday visa rules'),
+    (34, 'China-Canada agree tariff relief in Shenzhen'),
+    (35, 'South Africa rebukes Nigerian envoy'),
+    (36, 'Kenya: Dangote set for Pipeline board seat'),
+    (37, 'Modi pitches maritime plan at ASEAN summit'),
+    (38, 'China: Trump, Xi, Putin due to meet Thu 19 Nov'),
+    (39, 'US: Trump says he may meet Kim Jong Un in China'),
 ]
 
 # ---------------------------------------------------------------- layout
@@ -1034,8 +1072,8 @@ def build():
     draw_text(cv, MX + CW / 2.0, 34, title, 58, INK, bold=True, align='center')
     draw_text(cv, MX + CW / 2.0, 100, 'WORLD IN ONE FRAME', 12, RED, bold=True, align='center')
     cv.fill_rect(MX, 116, MX + CW, 118, INK)
-    # ---- lead panorama
-    draw_panorama(cv, MX, 120, CW, 168)
+    # ---- lead panels (one per top story, labelled + captioned)
+    draw_lead_panels(cv, MX, 120, CW, 168)
     cv.fill_rect(MX, 292, MX + CW, 294, INK)
     # ---- 3 lead cards
     leads = STORIES[0:3]
@@ -1075,15 +1113,17 @@ def build():
         draw_map(cv, MX, 768, CW, 186, pins=pins)
         draw_text(cv, MX, 958, 'Pins: stories 1\u201313', 8.5, INK_SOFT)
     # ---- date check strip (text to the judge — allowed and read)
-    cv.fill_rect(MX, 968, MX + CW, 998, INK)
+    cv.fill_rect(MX, 966, MX + CW, 1008, INK)
     dc1 = 'DATE CHECK \u2014 Every story here happened or was first reported on Tuesday 17 November 2026.'
     dc2 = 'Planned items are labelled: Trilateral Thu 19 Nov; Trump\u2013Kim meeting not scheduled. Contested claims name their source.'
-    draw_text(cv, MX + 8, 972, dc1, 10.5, (255, 255, 255), bold=True)
-    draw_text(cv, MX + 8, 985, dc2, 10.5, (220, 220, 210))
+    dc3 = 'Left out on purpose: Gaza aid call (16 Nov); Europe\u2019s E5 Ukraine team (13 Nov); Kuwait drone intercept (18 Nov).'
+    draw_text(cv, MX + 8, 970, dc1, 10.5, (255, 255, 255), bold=True)
+    draw_text(cv, MX + 8, 983, dc2, 10.5, (220, 220, 210))
+    draw_text(cv, MX + 8, 996, dc3, 10.5, (220, 220, 210))
     # ---- footer
-    draw_text(cv, MX, 1004, 'Sources: Reuters, AP, AFP, BBC, Al Jazeera, WHO, UN. Original drawings.',
+    draw_text(cv, MX, 1012, 'Sources: Reuters, AP, AFP, BBC, Al Jazeera, WHO, UN. Original drawings.',
               9, INK_SOFT)
-    draw_text(cv, MX + CW - text_width('WORLD IN ONE FRAME', 9), 1004,
+    draw_text(cv, MX + CW - text_width('WORLD IN ONE FRAME', 9), 1012,
               'WORLD IN ONE FRAME', 9, RED, bold=True)
     return cv
 
