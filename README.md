@@ -11,8 +11,14 @@ ten illustrated cards, a dotted world map and a numbered brief list.
 ## How it works
 
 `main.py` is pure Python 3 standard library (no network, no external
-assets). It draws everything itself: a hand-authored proportional stroke
-font, flat vector illustrations, and a dot world map. Running it writes
+assets, no system fonts at runtime). It draws everything itself: flat
+vector illustrations and a dot world map. The text is set in real type —
+**Liberation Serif Bold** (masthead, date, main headline) and **Noto Sans
+Condensed** (regular + bold, everything else) — rendered from a glyph
+atlas embedded in `main.py` as a single base64(zlib) blob. The atlas was
+produced once at build time with Pillow from the TrueType fonts on the
+build machine; the shipped program only decodes and blits glyphs, so it
+needs no fonts, no Pillow and no network when it runs. Running it writes
 `/output/entry.png` (1024×1024, ≤1 MiB). Two runs produce byte-identical
 output.
 
